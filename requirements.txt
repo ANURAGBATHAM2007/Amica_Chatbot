@@ -1,0 +1,6 @@
+
+streamlit
+google-generativeai
+SpeechRecognition
+gTTS
+pydub
