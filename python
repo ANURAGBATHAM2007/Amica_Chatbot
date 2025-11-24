@@ -1,1 +1,122 @@
+import streamlit as st
+import google.generativeai as genai
+import speech_recognition as sr
+from gtts import gTTS
+import tempfile
+import os
 
+# --- PAGE CONFIG ---
+st.set_page_config(page_title="Amica AI", page_icon="🧠", layout="centered")
+
+# --- CUSTOM CSS ---
+st.markdown("""
+<style>
+[data-testid="stAppViewContainer"] {
+    background-color: #ffffff;
+}
+.stChatMessage {
+    border-radius: 20px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}
+[data-testid="stChatMessageContent"] {
+    background-color: #ffe4e1;
+    color: #4b0082;
+}
+[data-testid="stChatMessageContent"]:has(.avatar-bot) {
+    background-color: #2563eb;
+    color: white;
+}
+[data-testid="stChatInput"] {
+    max-width: 600px;
+    width: 90%;
+    margin: 10px auto;
+    border-radius: 50px !important;
+    border: 1px solid #ced4da;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# --- API CONFIG ---
+API_KEY = "AIzaSyD7AFbXeZnX3t0uGXov_z6z77wW1eiyZNs"
+
+try:
+    genai.configure(api_key=API_KEY)
+except Exception as e:
+    st.error(f"API configuration error: {e}")
+    st.stop()
+
+# --- SYSTEM PROMPT ---
+SYSTEM_PROMPT = """
+You are Amica, a highly empathetic and caring AI assistant focused on mental well-being.
+Always respond warmly and safely.
+"""
+
+# --- MODEL (SUPPORTED MODEL) ---
+model = genai.GenerativeModel(
+    "gemini-1.5-flash",
+    system_instruction=SYSTEM_PROMPT
+)
+
+# --- INIT CHAT ---
+if "chat" not in st.session_state:
+    st.session_state.chat = model.start_chat(history=[])
+
+# --- DISPLAY HISTORY ---
+def show_chat_history():
+    for msg in st.session_state.chat.history:
+        role = msg["role"]
+        text = msg["parts"][0]["text"]
+
+        with st.chat_message("You" if role == "user" else "Amica"):
+            st.markdown(text)
+
+show_chat_history()
+
+# --- SPEECH TO TEXT ---
+def listen_to_mic():
+    recognizer = sr.Recognizer()
+    with sr.Microphone() as source:
+        st.info("🎤 Listening...")
+        audio = recognizer.listen(source, phrase_time_limit=6)
+
+    try:
+        return recognizer.recognize_google(audio)
+    except:
+        return ""
+
+# --- TEXT TO SPEECH ---
+def speak_text(text):
+    tts = gTTS(text)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+        tts.save(tmp.name)
+        st.audio(tmp.name, format="audio/mp3")
+        os.remove(tmp.name)
+
+# --- CHAT INPUT ---
+user_prompt = st.chat_input("Type how you feel")
+
+if user_prompt:
+    with st.chat_message("You"):
+        st.markdown(user_prompt)
+
+    # Safety check
+    suicide_keywords = ["kill myself", "want to die", "suicidal", "end my life"]
+
+    if any(k in user_prompt.lower() for k in suicide_keywords):
+        reply = (
+            "I'm very sorry that you're feeling this way. "
+            "Please contact this helpline immediately: **9152987821**. "
+            "You are not alone."
+        )
+    else:
+        reply = st.session_state.chat.send_message(user_prompt).text
+
+    with st.chat_message("Amica"):
+        st.markdown(reply)
+        speak_text(reply)
+
+    # Save history
+    st.session_state.chat.history.append({"role": "user", "parts": [{"text": user_prompt}]})
+    st.session_state.chat.history.append({"role": "model", "parts": [{"text": reply}]})
