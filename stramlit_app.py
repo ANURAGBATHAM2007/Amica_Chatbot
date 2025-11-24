@@ -1,124 +1,56 @@
 import streamlit as st
 import google.generativeai as genai
-import speech_recognition as sr
-from gtts import gTTS
-import tempfile
-import os
 
-# ---------------- PAGE CONFIG ----------------
-st.set_page_config(page_title="Amica AI", page_icon="🧠", layout="centered")
+# =====================
+#    CONFIGURATION
+# =====================
+API_KEY = "AIzaSyC46uUU60P3_Opq2O4osu8uAii_aygkxIc"   # Your API Key
+genai.configure(api_key=API_KEY)
 
-# ---------------- CUSTOM CSS ----------------
-st.markdown("""
-<style>
-[data-testid="stAppViewContainer"] {
-    background-color: #ffffff;
-}
-.stChatMessage {
-    border-radius: 20px;
-    padding: 1rem 1.5rem;
-    margin-bottom: 1rem;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-}
-[data-testid="stChatMessageContent"] {
-    background-color: #ffe4e1;
-    color: #4b0082;
-}
-[data-testid="stChatMessageContent"]:has(.avatar-bot) {
-    background-color: #2563eb;
-    color: white;
-}
-[data-testid="stChatInput"] {
-    max-width: 600px;
-    width: 90%;
-    margin: 10px auto;
-    border-radius: 50px !important;
-    border: 1px solid #ced4da;
-}
-</style>
-""", unsafe_allow_html=True)
+model = genai.GenerativeModel("gemini-1.5-flash")
 
-# ---------------- API CONFIG ----------------
-API_KEY = "AIzaSyD7AFbXeZnX3t0uGXov_z6z77wW1eiyZNs"
+# =====================
+#   STREAMLIT UI
+# =====================
+st.set_page_config(page_title="Gemini Chatbot", page_icon="🤖", layout="centered")
 
-try:
-    genai.configure(api_key=API_KEY)
-except Exception as e:
-    st.error(f"API configuration error: {e}")
-    st.stop()
+st.title("🤖 Gemini Chatbot")
+st.write("Ask anything below...")
 
-# ---------------- SYSTEM PROMPT ----------------
-SYSTEM_PROMPT = """
-You are Amica, a highly empathetic and caring AI assistant focused on mental well-being.
-Always respond warmly, kindly, and safely.
-"""
+# Save chat messages
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-# ---------------- MODEL SETUP ----------------
-model = genai.GenerativeModel(
-    "gemini-1.5-flash", 
-    system_instruction=SYSTEM_PROMPT
-)
+# Show chat history
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.write(msg["content"])
 
-# ---------------- CHAT STATE ----------------
-if "chat" not in st.session_state:
-    st.session_state.chat = model.start_chat(history=[])
-
-# ---------------- DISPLAY CHAT HISTORY ----------------
-def show_chat_history():
-    for msg in st.session_state.chat.history:
-        role = msg["role"]
-        text = msg["parts"][0]["text"]
-
-        with st.chat_message("You" if role == "user" else "Amica"):
-            st.markdown(text)
-
-show_chat_history()
-
-# ---------------- SPEECH TO TEXT ----------------
-def listen_to_mic():
-    recognizer = sr.Recognizer()
-    with sr.Microphone() as source:
-        st.info("🎤 Listening...")
-        audio = recognizer.listen(source, phrase_time_limit=6)
-
-    try:
-        return recognizer.recognize_google(audio)
-    except:
-        return ""
-
-# ---------------- TEXT TO SPEECH ----------------
-def speak_text(text):
-    tts = gTTS(text)
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-        tts.save(tmp.name)
-        st.audio(tmp.name, format="audio/mp3")
-        os.remove(tmp.name)
-
-# ---------------- CHAT INPUT ----------------
-user_prompt = st.chat_input("Type how you feel")
+# Chat input
+user_prompt = st.chat_input("Type your message...")
 
 if user_prompt:
-    # Show user message
-    with st.chat_message("You"):
-        st.markdown(user_prompt)
+    # Display user message
+    with st.chat_message("user"):
+        st.write(user_prompt)
 
-    # Safety check for self-harm
-    suicide_keywords = ["kill myself", "want to die", "suicidal", "end my life"]
+    # Save user message
+    st.session_state.messages.append({"role": "user", "content": user_prompt})
 
-    if any(k in user_prompt.lower() for k in suicide_keywords):
-        reply = (
-            "I'm very sorry that you're feeling this way. "
-            "Please contact this helpline immediately: **9152987821**. "
-            "You are not alone, and help is available."
-        )
-    else:
-        reply = st.session_state.chat.send_message(user_prompt).text
+    # =====================
+    #   GEMINI RESPONSE
+    # =====================
+    try:
+        response = model.generate_content(user_prompt)
+        bot_reply = response.text
 
-    # Show bot reply
-    with st.chat_message("Amica"):
-        st.markdown(reply)
-        speak_text(reply)
+        # Display bot reply
+        with st.chat_message("assistant"):
+            st.write(bot_reply)
 
-    # Add to history
-    st.session_state.chat.history.append({"role": "user", "parts": [{"text": user_prompt}]})
-    st.session_state.chat.history.append({"role": "model", "parts": [{"text": reply}]})
+        # Save
+        st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+
+    except Exception as e:
+        with st.chat_message("assistant"):
+            st.error("⚠ Error: " + str(e))
